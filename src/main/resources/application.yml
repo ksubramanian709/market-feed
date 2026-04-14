@@ -20,7 +20,7 @@ market-feed:
     interval-seconds: 15   # how often WebSocket pushes updates
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
-    model: claude-sonnet-4-5
+    model: claude-sonnet-4-6
 
 springdoc:
   api-docs:
