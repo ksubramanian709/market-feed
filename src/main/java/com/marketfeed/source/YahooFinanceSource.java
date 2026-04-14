@@ -72,6 +72,9 @@ public class YahooFinanceSource implements MarketDataSource {
                     .currency(meta.getCurrency() != null ? meta.getCurrency() : "USD")
                     .assetType(inferAssetType(meta.getInstrumentType(), symbol))
                     .timestamp(Instant.now())
+                    .marketCap(meta.getMarketCap())
+                    .fiftyTwoWeekHigh(meta.getFiftyTwoWeekHigh())
+                    .fiftyTwoWeekLow(meta.getFiftyTwoWeekLow())
                     .build();
             return Optional.of(quote);
 
@@ -214,6 +217,9 @@ public class YahooFinanceSource implements MarketDataSource {
             private double regularMarketDayHigh;
             private double regularMarketDayLow;
             private long   regularMarketVolume;
+            private long   marketCap;
+            private double fiftyTwoWeekHigh;
+            private double fiftyTwoWeekLow;
         }
 
         @Data @JsonIgnoreProperties(ignoreUnknown = true)

@@ -21,6 +21,11 @@ public class Quote {
     private AssetType assetType;
     private Instant timestamp;
 
+    // Extended stats — populated when available from Yahoo Finance
+    private long   marketCap;
+    private double fiftyTwoWeekHigh;
+    private double fiftyTwoWeekLow;
+
     public enum AssetType {
         EQUITY, FUTURE, FOREX, INDEX, COMMODITY, CRYPTO
     }
