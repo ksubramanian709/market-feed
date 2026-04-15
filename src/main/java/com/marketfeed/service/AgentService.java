@@ -98,7 +98,7 @@ public class AgentService {
                     - Return ONLY a JSON array of 6 strings, no other text
 
                     Example format: ["Question 1?", "Question 2?", ...]
-                    """.formatted(headlines);
+                    """.formatted(headlines.replace("%", "%%"));
 
             List<Map<String, Object>> messages = List.of(Map.of("role", "user", "content", prompt));
             Map<String, Object> body = new LinkedHashMap<>();
@@ -211,7 +211,7 @@ public class AgentService {
                 - summary ≤ 18 words, must reference a specific price, %, or headline
                 - exactly 3 keyPoints, each ≤ 15 words, no generic filler
                 - same order as tickers listed above
-                """.formatted(ctx.toString());
+                """.formatted(ctx.toString().replace("%", "%%"));
 
         try {
             List<Map<String, Object>> messages = List.of(Map.of("role", "user", "content", prompt));
