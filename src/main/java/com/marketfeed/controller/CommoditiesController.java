@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+
 @RestController
 @RequestMapping("/v1/commodities")
 @RequiredArgsConstructor
@@ -54,30 +55,4 @@ public class CommoditiesController {
                 .build();
     }
 
-    @GetMapping("/futures/energy")
-    @Operation(summary = "Energy futures (Crude, NatGas, Brent)")
-    public ApiResponse<List<Quote>> getEnergy() {
-        return fetchSector("energy");
-    }
-
-    @GetMapping("/futures/metals")
-    @Operation(summary = "Metals futures (Gold, Silver, Copper)")
-    public ApiResponse<List<Quote>> getMetals() {
-        return fetchSector("metals");
-    }
-
-    @GetMapping("/futures/grains")
-    @Operation(summary = "Grains futures (Corn, Wheat, Soybeans)")
-    public ApiResponse<List<Quote>> getGrains() {
-        return fetchSector("grains");
-    }
-
-    private ApiResponse<List<Quote>> fetchSector(String sector) {
-        List<Quote> quotes = FUTURES.get(sector).stream()
-                .map(sym -> quoteService.getQuote(sym))
-                .filter(r -> r.getData() != null)
-                .map(ApiResponse::getData)
-                .toList();
-        return ApiResponse.success(quotes, "aggregated");
-    }
 }
