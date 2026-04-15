@@ -15,9 +15,15 @@ public class OptionsContract {
     private double  changePercent;
     private long    volume;
     private long    openInterest;
-    private double  impliedVolatility;   // raw decimal from Yahoo (e.g. 0.30 = 30%)
+    private double  impliedVolatility;   // decimal, e.g. 0.30 = 30%
     private boolean inTheMoney;
     private long    expiration;          // epoch seconds
     private long    lastTradeDate;
     private String  contractSize;
+
+    // Greeks (available via Tradier)
+    private double  delta;
+    private double  gamma;
+    private double  theta;
+    private double  vega;
 }

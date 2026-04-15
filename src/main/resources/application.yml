@@ -23,6 +23,9 @@ market-feed:
     model: claude-sonnet-4-6
   brave:
     api-key: ${BRAVE_API_KEY:}
+  marketdata:
+    token: ${MARKETDATA_TOKEN:}
+    base-url: https://api.marketdata.app/v1
 
 springdoc:
   api-docs:
