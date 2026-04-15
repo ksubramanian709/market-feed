@@ -187,31 +187,24 @@ public class AgentService {
             ctx.append("\n");
         }
 
-        String prompt = """
-                You are an expert financial analyst delivering a concise morning briefing.
-
-                Here is today's market data for the user's watchlist:
-
-                %s
-
-                For each ticker, write what the investor needs to know TODAY — specific to the data above.
-
-                Return ONLY a valid JSON array in this exact format, no other text:
-                [
-                  {
-                    "symbol": "TICKER",
-                    "sentiment": "bullish",
-                    "summary": "One sentence key takeaway with specific data point",
-                    "keyPoints": ["Point 1", "Point 2", "Point 3"]
-                  }
-                ]
-
-                Rules:
-                - sentiment must be exactly "bullish", "bearish", or "neutral"
-                - summary ≤ 18 words, must reference a specific price, %, or headline
-                - exactly 3 keyPoints, each ≤ 15 words, no generic filler
-                - same order as tickers listed above
-                """.formatted(ctx.toString().replace("%", "%%"));
+        String prompt = "You are an expert financial analyst delivering a concise morning briefing.\n\n"
+                + "Here is today's market data for the user's watchlist:\n\n"
+                + ctx
+                + "For each ticker, write what the investor needs to know TODAY — specific to the data above.\n\n"
+                + "Return ONLY a valid JSON array in this exact format, no other text:\n"
+                + "[\n"
+                + "  {\n"
+                + "    \"symbol\": \"TICKER\",\n"
+                + "    \"sentiment\": \"bullish\",\n"
+                + "    \"summary\": \"One sentence key takeaway with specific data point\",\n"
+                + "    \"keyPoints\": [\"Point 1\", \"Point 2\", \"Point 3\"]\n"
+                + "  }\n"
+                + "]\n\n"
+                + "Rules:\n"
+                + "- sentiment must be exactly \"bullish\", \"bearish\", or \"neutral\"\n"
+                + "- summary 18 words max, must reference a specific price, percent move, or headline\n"
+                + "- exactly 3 keyPoints, each 15 words max, no generic filler\n"
+                + "- same order as tickers listed above\n";
 
         try {
             List<Map<String, Object>> messages = List.of(Map.of("role", "user", "content", prompt));
