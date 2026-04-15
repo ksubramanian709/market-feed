@@ -25,7 +25,7 @@ public class FundamentalsService {
     @Value("${market-feed.alpha-vantage.base-url:https://www.alphavantage.co/query}")
     private String baseUrl;
 
-    @Cacheable(value = "fundamentals", key = "#symbol.toUpperCase()")
+    @Cacheable(value = "fundamentals", key = "#symbol.toUpperCase()", unless = "#result.error != null")
     public Fundamentals getFundamentals(String symbol) {
         try {
             String url = UriComponentsBuilder.fromHttpUrl(baseUrl)
@@ -41,6 +41,8 @@ public class FundamentalsService {
                 return Fundamentals.builder().symbol(symbol).error("No data returned").build();
             }
             if (body.containsKey("Information") || body.containsKey("Note")) {
+                Object msg = body.containsKey("Information") ? body.get("Information") : body.get("Note");
+                log.warn("AV rate limit for {}: {}", symbol, msg);
                 return Fundamentals.builder().symbol(symbol).error("API rate limit reached").build();
             }
             // AV returns empty object {} for unknown symbols

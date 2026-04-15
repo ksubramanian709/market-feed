@@ -29,7 +29,7 @@ public class EarningsService {
 
     // ─── Earnings history (per symbol) ───────────────────────────────────────────
 
-    @Cacheable(value = "earnings", key = "#symbol.toUpperCase()")
+    @Cacheable(value = "earnings", key = "#symbol.toUpperCase()", unless = "#result.error != null")
     public EarningsHistory getEarningsHistory(String symbol) {
         try {
             String url = UriComponentsBuilder.fromHttpUrl(BASE)
