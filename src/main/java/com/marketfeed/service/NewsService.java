@@ -22,6 +22,7 @@ import java.time.*;
 import java.time.format.*;
 import java.util.*;
 import java.util.stream.*;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -168,6 +169,9 @@ public class NewsService {
 
                 if (title == null || title.isBlank()) continue;
 
+                // Extract thumbnail image
+                String imageUrl = extractImageUrl(el, desc, link);
+
                 items.add(NewsItem.builder()
                     .title(cleanHtml(title))
                     .url(link)
@@ -175,6 +179,7 @@ public class NewsService {
                     .summary(cleanHtml(desc))
                     .publishedAt(parseDate(pubDate))
                     .sentiment("Neutral")
+                    .imageUrl(imageUrl)
                     .build());
             }
         } catch (Exception e) {
@@ -187,6 +192,46 @@ public class NewsService {
         NodeList nl = parent.getElementsByTagName(tag);
         if (nl.getLength() == 0) return null;
         return nl.item(0).getTextContent();
+    }
+
+    private String extractImageUrl(Element el, String desc, String articleUrl) {
+        // 1. <media:content url="..."> — most RSS feeds with images
+        for (String tag : List.of("media:content", "content", "media:thumbnail", "thumbnail")) {
+            NodeList nl = el.getElementsByTagName(tag);
+            if (nl.getLength() > 0) {
+                String url = ((Element) nl.item(0)).getAttribute("url");
+                if (url != null && !url.isBlank()) return url;
+            }
+        }
+        // 2. <enclosure url="..."> — podcast-style enclosures
+        NodeList enclosures = el.getElementsByTagName("enclosure");
+        if (enclosures.getLength() > 0) {
+            String url  = ((Element) enclosures.item(0)).getAttribute("url");
+            String type = ((Element) enclosures.item(0)).getAttribute("type");
+            if (url != null && !url.isBlank() && (type == null || type.startsWith("image"))) return url;
+        }
+        // 3. <img src="..."> embedded in the description HTML
+        if (desc != null) {
+            java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("<img[^>]+src=[\"']([^\"']+)[\"']", java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(desc);
+            if (m.find()) {
+                String url = m.group(1);
+                if (!url.contains("pixel") && !url.contains("tracker") && !url.contains("beacon")) return url;
+            }
+        }
+        // 4. Fallback: Google favicon for the publication domain
+        if (articleUrl != null && !articleUrl.isBlank()) {
+            try {
+                java.net.URI uri = java.net.URI.create(articleUrl);
+                String domain = uri.getHost();
+                if (domain != null) {
+                    domain = domain.replaceFirst("^www\\.", "");
+                    return "https://www.google.com/s2/favicons?domain=" + domain + "&sz=128";
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     private String cleanHtml(String s) {
