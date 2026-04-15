@@ -41,6 +41,10 @@ public class CacheConfig {
         manager.registerCustomCache("markets",
                 Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(5).build());
 
+        // Alpha Vantage OVERVIEW — changes infrequently, cache 1 hour
+        manager.registerCustomCache("fundamentals",
+                Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(200).build());
+
         return manager;
     }
 }

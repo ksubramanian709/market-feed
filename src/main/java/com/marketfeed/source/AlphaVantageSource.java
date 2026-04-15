@@ -159,6 +159,52 @@ public class AlphaVantageSource implements MarketDataSource {
         return Quote.AssetType.EQUITY;
     }
 
+    // ---------- fundamentals / OVERVIEW ----------
+
+    /**
+     * Returns key fundamentals (market cap, 52-week range, P/E, etc.) from
+     * Alpha Vantage's OVERVIEW endpoint. Returns null on failure or rate-limit.
+     */
+    public FundamentalsData getFundamentals(String symbol) {
+        if (!isAvailable()) return null;
+        try {
+            String url = UriComponentsBuilder.fromHttpUrl(baseUrl)
+                    .queryParam("function", "OVERVIEW")
+                    .queryParam("symbol", symbol.toUpperCase())
+                    .queryParam("apikey", apiKey)
+                    .toUriString();
+
+            OverviewResponse ov = restTemplate.getForObject(url, OverviewResponse.class);
+            if (ov == null || ov.getSymbol() == null || ov.getSymbol().isBlank()) {
+                log.debug("AlphaVantage OVERVIEW empty for {} (rate limit or demo key)", symbol);
+                return null;
+            }
+            FundamentalsData fd = new FundamentalsData();
+            fd.setMarketCap(parseLong(ov.getMarketCapitalization()));
+            fd.setFiftyTwoWeekHigh(parseDouble(ov.getFiftyTwoWeekHigh()));
+            fd.setFiftyTwoWeekLow(parseDouble(ov.getFiftyTwoWeekLow()));
+            fd.setPeRatio(parseDouble(ov.getPeRatio()));
+            fd.setDividendYield(parseDouble(ov.getDividendYield()));
+            fd.setEps(parseDouble(ov.getEps()));
+            fd.setBeta(parseDouble(ov.getBeta()));
+            return fd;
+        } catch (Exception e) {
+            log.debug("AlphaVantage OVERVIEW failed for {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
+    @lombok.Data
+    public static class FundamentalsData {
+        private long   marketCap;
+        private double fiftyTwoWeekHigh;
+        private double fiftyTwoWeekLow;
+        private double peRatio;
+        private double dividendYield;
+        private double eps;
+        private double beta;
+    }
+
     // ---------- response POJOs ----------
 
     @Data
@@ -179,6 +225,19 @@ public class AlphaVantageSource implements MarketDataSource {
             @JsonProperty("09. change")       private String change;
             @JsonProperty("10. change percent") private String changePercent;
         }
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OverviewResponse {
+        @JsonProperty("Symbol")                  private String symbol;
+        @JsonProperty("MarketCapitalization")    private String marketCapitalization;
+        @JsonProperty("52WeekHigh")              private String fiftyTwoWeekHigh;
+        @JsonProperty("52WeekLow")               private String fiftyTwoWeekLow;
+        @JsonProperty("PERatio")                 private String peRatio;
+        @JsonProperty("DividendYield")           private String dividendYield;
+        @JsonProperty("EPS")                     private String eps;
+        @JsonProperty("Beta")                    private String beta;
     }
 
     @Data
