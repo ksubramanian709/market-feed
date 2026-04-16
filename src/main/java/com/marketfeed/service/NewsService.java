@@ -47,13 +47,27 @@ public class NewsService {
     private static final String SEEKING_ALPHA_RSS =
         "https://seekingalpha.com/api/sa/combined/%s.xml";
 
-    // MarketWatch headlines (general market news)
-    private static final String MARKETWATCH_RSS =
-        "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/";
-
-    // CNBC general markets
+    // ── General market sources ──────────────────────────────────────────────────
     private static final String CNBC_RSS =
         "https://www.cnbc.com/id/100003114/device/rss/rss.html";
+    private static final String MARKETWATCH_RSS =
+        "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/";
+    private static final String REUTERS_RSS =
+        "https://feeds.reuters.com/reuters/businessNews";
+    private static final String BBC_BUSINESS_RSS =
+        "https://feeds.bbci.co.uk/news/business/rss.xml";
+    private static final String NASDAQ_NEWS_RSS =
+        "https://www.nasdaq.com/feed/rssoutbound?category=Markets";
+    private static final String MOTLEY_FOOL_RSS =
+        "https://www.fool.com/feeds/index.aspx";
+    private static final String INVESTOPEDIA_RSS =
+        "https://www.investopedia.com/feedbuilder/feed/getfeed?feedName=rss_headline";
+    private static final String NPR_ECONOMY_RSS =
+        "https://feeds.npr.org/1017/rss.xml";
+    private static final String THESTREET_RSS =
+        "https://www.thestreet.com/rss/main.xml";
+    private static final String FORBES_RSS =
+        "https://www.forbes.com/investing/feed2/";
 
     // Alpha Vantage news (used when API key is configured)
     private static final String AV_NEWS_URL = "https://www.alphavantage.co/query";
@@ -67,11 +81,19 @@ public class NewsService {
     public ApiResponse<List<NewsItem>> getMarketNews() {
         List<NewsItem> items = new ArrayList<>();
 
-        // Pull from 3 general-market RSS feeds in parallel (sequential here, fast enough)
-        items.addAll(fetchRss(CNBC_RSS,        "CNBC"));
-        items.addAll(fetchRss(MARKETWATCH_RSS, "MarketWatch"));
+        // Cap each source at 3-4 items so no single outlet dominates
+        items.addAll(fetchRss(CNBC_RSS,          "CNBC",          3));
+        items.addAll(fetchRss(REUTERS_RSS,        "Reuters",       3));
+        items.addAll(fetchRss(MARKETWATCH_RSS,    "MarketWatch",   3));
+        items.addAll(fetchRss(BBC_BUSINESS_RSS,   "BBC Business",  3));
+        items.addAll(fetchRss(NASDAQ_NEWS_RSS,    "Nasdaq",        3));
+        items.addAll(fetchRss(MOTLEY_FOOL_RSS,    "Motley Fool",   3));
+        items.addAll(fetchRss(INVESTOPEDIA_RSS,   "Investopedia",  3));
+        items.addAll(fetchRss(NPR_ECONOMY_RSS,    "NPR",           3));
+        items.addAll(fetchRss(THESTREET_RSS,      "TheStreet",     3));
+        items.addAll(fetchRss(FORBES_RSS,         "Forbes",        3));
         items.addAll(fetchRss(
-            String.format(GOOGLE_NEWS_RSS, "financial+markets+economy"), "Google News"));
+            String.format(GOOGLE_NEWS_RSS, "stock+market+economy"), "Google News", 4));
 
         // Supplement with Alpha Vantage if key configured
         if (alphaVantageKey != null && !alphaVantageKey.isBlank()) {
@@ -81,7 +103,7 @@ public class NewsService {
         List<NewsItem> deduplicated = deduplicate(items).stream()
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(15)
+                .limit(20)
                 .collect(Collectors.toList());
 
         return deduplicated.isEmpty()
@@ -126,6 +148,10 @@ public class NewsService {
     // ─── RSS fetching & parsing ──────────────────────────────────────────────────
 
     private List<NewsItem> fetchRss(String url, String sourceName) {
+        return fetchRss(url, sourceName, 4);
+    }
+
+    private List<NewsItem> fetchRss(String url, String sourceName, int maxItems) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.USER_AGENT,
@@ -137,7 +163,7 @@ public class NewsService {
             if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
                 return Collections.emptyList();
             }
-            return parseRss(resp.getBody(), sourceName);
+            return parseRss(resp.getBody(), sourceName, maxItems);
         } catch (Exception e) {
             log.debug("RSS fetch failed [{}]: {}", sourceName, e.getMessage());
             return Collections.emptyList();
@@ -145,6 +171,10 @@ public class NewsService {
     }
 
     private List<NewsItem> parseRss(String xml, String sourceName) {
+        return parseRss(xml, sourceName, 4);
+    }
+
+    private List<NewsItem> parseRss(String xml, String sourceName, int maxItems) {
         List<NewsItem> items = new ArrayList<>();
         try {
             // Strip leading BOM / whitespace that breaks some parsers
@@ -157,7 +187,7 @@ public class NewsService {
                 .parse(new ByteArrayInputStream(cleaned.getBytes(StandardCharsets.UTF_8)));
 
             NodeList itemNodes = doc.getElementsByTagName("item");
-            for (int i = 0; i < itemNodes.getLength() && i < 8; i++) {
+            for (int i = 0; i < itemNodes.getLength() && i < maxItems; i++) {
                 Element el     = (Element) itemNodes.item(i);
                 String title   = text(el, "title");
                 String link    = text(el, "link");
