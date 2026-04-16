@@ -53,7 +53,7 @@ public class ScreenerService {
     private final ConcurrentHashMap<String, double[]> priceCache = new ConcurrentHashMap<>();
 
     // Shared thread pool for both universe fetch and price refresh
-    private final ExecutorService pool = Executors.newFixedThreadPool(16);
+    private final ExecutorService pool = Executors.newFixedThreadPool(8);
 
     // ── Universe fetch ────────────────────────────────────────────────────────
 
