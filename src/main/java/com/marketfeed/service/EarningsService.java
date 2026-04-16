@@ -26,6 +26,7 @@ public class EarningsService {
 
     private final RestTemplate restTemplate;
     private final YahooFinanceCrumbService crumbService;
+    private final ScreenerService screenerService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${market-feed.alpha-vantage.api-key:demo}")
@@ -95,15 +96,45 @@ public class EarningsService {
     @Cacheable(value = "earnings-calendar", key = "'upcoming'", unless = "#result == null || #result.isEmpty()")
     public List<EarningsCalendarItem> getEarningsCalendar() {
         // Try Yahoo Finance first — live data, no API key required
-        List<EarningsCalendarItem> yfItems = fetchYFEarningsCalendar();
-        if (!yfItems.isEmpty()) {
-            log.info("Earnings calendar loaded from Yahoo Finance: {} companies", yfItems.size());
-            return yfItems;
+        List<EarningsCalendarItem> items = fetchYFEarningsCalendar();
+        if (items.isEmpty()) {
+            log.info("YF earnings calendar empty — falling back to Alpha Vantage");
+            items = fetchAlphaVantageCalendar();
+        } else {
+            log.info("Earnings calendar loaded from Yahoo Finance: {} companies", items.size());
         }
 
-        // Fall back to Alpha Vantage
-        log.info("YF earnings calendar empty — falling back to Alpha Vantage");
-        return fetchAlphaVantageCalendar();
+        // Build market cap lookup from screener universe (already cached)
+        Map<String, Long> capBySymbol = new HashMap<>();
+        try {
+            screenerService.getUniverse().forEach(f -> {
+                if (f.getMarketCap() != null) capBySymbol.put(f.getSymbol(), f.getMarketCap());
+            });
+        } catch (Exception e) {
+            log.warn("Could not enrich earnings calendar with market caps: {}", e.getMessage());
+        }
+
+        // Enrich each item with market cap, then sort by cap desc and keep top 500
+        return items.stream()
+            .map(item -> {
+                Long cap = item.getMarketCap() != null ? item.getMarketCap()
+                         : capBySymbol.get(item.getSymbol());
+                return EarningsCalendarItem.builder()
+                    .symbol(item.getSymbol())
+                    .name(item.getName())
+                    .reportDate(item.getReportDate())
+                    .fiscalDateEnding(item.getFiscalDateEnding())
+                    .estimate(item.getEstimate())
+                    .currency(item.getCurrency())
+                    .marketCap(cap)
+                    .build();
+            })
+            .sorted(Comparator.comparingLong(
+                (EarningsCalendarItem i) -> i.getMarketCap() != null ? i.getMarketCap() : 0L
+            ).reversed())
+            .limit(500)
+            .sorted(Comparator.comparing(EarningsCalendarItem::getReportDate))
+            .collect(java.util.stream.Collectors.toList());
     }
 
     // ─── Yahoo Finance upcoming_earnings screener ─────────────────────────────────
