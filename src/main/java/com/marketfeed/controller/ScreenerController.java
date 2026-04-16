@@ -9,42 +9,39 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/v1/screener")
 @RequiredArgsConstructor
-@Tag(name = "Screener", description = "Stock screener — filter by valuation, growth, profitability")
+@Tag(name = "Screener", description = "Screen all US-listed equities by sector, valuation, and dividends")
 public class ScreenerController {
 
     private final ScreenerService screenerService;
 
     @GetMapping
-    @Operation(summary = "Screen stocks", description = "Filter the screener universe by P/E, market cap, margins, growth, beta, dividends.")
+    @Operation(summary = "Screen stocks")
     public ResponseEntity<List<Fundamentals>> screen(
         @RequestParam(required = false) String  sector,
         @RequestParam(required = false) Double  minPE,
         @RequestParam(required = false) Double  maxPE,
         @RequestParam(required = false) Double  minMarketCapB,
         @RequestParam(required = false) Double  maxMarketCapB,
-        @RequestParam(required = false) Double  minProfitMargin,
-        @RequestParam(required = false) Double  minROE,
-        @RequestParam(required = false) Double  minRevGrowth,
-        @RequestParam(required = false) Double  maxBeta,
         @RequestParam(required = false) Double  minDivYield,
-        @RequestParam(defaultValue = "marketCap") String sortBy,
+        @RequestParam(required = false) Double  minEps,
+        @RequestParam(required = false) Double  maxBeta,
+        @RequestParam(defaultValue = "marketCap") String  sortBy,
         @RequestParam(defaultValue = "true")      boolean sortDesc
     ) {
-        ScreenerService.ScreenerParams params = new ScreenerService.ScreenerParams(
-            sector, minPE, maxPE, minMarketCapB, maxMarketCapB,
-            minProfitMargin, minROE, minRevGrowth, maxBeta, minDivYield,
-            sortBy, sortDesc
-        );
-        return ResponseEntity.ok(screenerService.screen(params));
+        return ResponseEntity.ok(screenerService.screen(
+            new ScreenerService.ScreenerParams(
+                sector, minPE, maxPE, minMarketCapB, maxMarketCapB,
+                minDivYield, minEps, maxBeta, sortBy, sortDesc
+            )
+        ));
     }
 
     @GetMapping("/sectors")
-    @Operation(summary = "List available sectors")
+    @Operation(summary = "List all available sectors")
     public ResponseEntity<List<String>> sectors() {
         return ResponseEntity.ok(screenerService.getSectors());
     }
