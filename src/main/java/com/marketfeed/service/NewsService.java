@@ -47,27 +47,45 @@ public class NewsService {
     private static final String SEEKING_ALPHA_RSS =
         "https://seekingalpha.com/api/sa/combined/%s.xml";
 
-    // ── General market sources ──────────────────────────────────────────────────
-    private static final String CNBC_RSS =
-        "https://www.cnbc.com/id/100003114/device/rss/rss.html";
+    // ── Finance/markets-specific feeds (no lifestyle, sports, entertainment) ───
+    private static final String CNBC_MARKETS_RSS =
+        "https://www.cnbc.com/id/20910258/device/rss/rss.html";          // CNBC Markets
+    private static final String CNBC_FINANCE_RSS =
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html";          // CNBC Finance
     private static final String MARKETWATCH_RSS =
         "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/";
-    private static final String REUTERS_RSS =
+    private static final String REUTERS_FINANCE_RSS =
         "https://feeds.reuters.com/reuters/businessNews";
-    private static final String BBC_BUSINESS_RSS =
-        "https://feeds.bbci.co.uk/news/business/rss.xml";
+    private static final String AP_FINANCE_RSS =
+        "https://feeds.apnews.com/rss/apf-finance";                      // AP Finance
+    private static final String WSJ_MARKETS_RSS =
+        "https://feeds.a.djnewswires.com/rss/WSJ_wsjonline";             // WSJ (public)
+    private static final String FT_RSS =
+        "https://www.ft.com/rss/home/us";                                // Financial Times
+    private static final String THESTREET_MARKETS_RSS =
+        "https://www.thestreet.com/markets/rss.xml";
     private static final String NASDAQ_NEWS_RSS =
         "https://www.nasdaq.com/feed/rssoutbound?category=Markets";
-    private static final String MOTLEY_FOOL_RSS =
-        "https://www.fool.com/feeds/index.aspx";
-    private static final String INVESTOPEDIA_RSS =
-        "https://www.investopedia.com/feedbuilder/feed/getfeed?feedName=rss_headline";
-    private static final String NPR_ECONOMY_RSS =
-        "https://feeds.npr.org/1017/rss.xml";
-    private static final String THESTREET_RSS =
-        "https://www.thestreet.com/rss/main.xml";
-    private static final String FORBES_RSS =
-        "https://www.forbes.com/investing/feed2/";
+    private static final String BARRONS_RSS =
+        "https://www.barrons.com/rss/public/rss.xml";
+
+    // ── Title relevance: must contain at least one of these financial keywords ──
+    private static final java.util.regex.Pattern FINANCE_PATTERN =
+        java.util.regex.Pattern.compile(
+            "\\b(stock|market|share|equity|fund|bond|yield|rate|fed|federal reserve|" +
+            "bank|economy|gdp|inflation|cpi|earnings|revenue|profit|loss|ipo|merger|" +
+            "acquisition|nasdaq|nyse|s&p|dow|index|trade|tariff|oil|gold|dollar|" +
+            "currency|crypto|bitcoin|sector|quarterly|fiscal|analyst|investor|" +
+            "wall street|interest rate|central bank|treasury|dividend|hedge|" +
+            "portfolio|asset|commodity|futures|options|rally|selloff|recession|" +
+            "growth|debt|deficit|budget|spending|tax|regulation|sec|sanctions|" +
+            "geopolit|war|conflict|policy|deal|billion|million|trillion|percent|" +
+            "\\$|price|cost|unemployment|layoff|hire|quarter|supply chain|" +
+            "chip|semiconductor|energy|crude|gas|coal|retail|consumer|spending|" +
+            "housing|mortgage|real estate|reit|etf|buyback|insider|short|" +
+            "vc|venture|startup|valuation|revenue|margin|guidance|outlook)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+        );
 
     // Alpha Vantage news (used when API key is configured)
     private static final String AV_NEWS_URL = "https://www.alphavantage.co/query";
@@ -81,19 +99,19 @@ public class NewsService {
     public ApiResponse<List<NewsItem>> getMarketNews() {
         List<NewsItem> items = new ArrayList<>();
 
-        // Cap each source at 3-4 items so no single outlet dominates
-        items.addAll(fetchRss(CNBC_RSS,          "CNBC",          3));
-        items.addAll(fetchRss(REUTERS_RSS,        "Reuters",       3));
-        items.addAll(fetchRss(MARKETWATCH_RSS,    "MarketWatch",   3));
-        items.addAll(fetchRss(BBC_BUSINESS_RSS,   "BBC Business",  3));
-        items.addAll(fetchRss(NASDAQ_NEWS_RSS,    "Nasdaq",        3));
-        items.addAll(fetchRss(MOTLEY_FOOL_RSS,    "Motley Fool",   3));
-        items.addAll(fetchRss(INVESTOPEDIA_RSS,   "Investopedia",  3));
-        items.addAll(fetchRss(NPR_ECONOMY_RSS,    "NPR",           3));
-        items.addAll(fetchRss(THESTREET_RSS,      "TheStreet",     3));
-        items.addAll(fetchRss(FORBES_RSS,         "Forbes",        3));
+        // Finance/markets-specific feeds only — 3-4 items each so no outlet dominates
+        items.addAll(fetchRss(CNBC_MARKETS_RSS,        "CNBC Markets",   4));
+        items.addAll(fetchRss(CNBC_FINANCE_RSS,        "CNBC Finance",   3));
+        items.addAll(fetchRss(REUTERS_FINANCE_RSS,     "Reuters",        4));
+        items.addAll(fetchRss(MARKETWATCH_RSS,         "MarketWatch",    4));
+        items.addAll(fetchRss(AP_FINANCE_RSS,          "AP Finance",     3));
+        items.addAll(fetchRss(FT_RSS,                  "Financial Times",3));
+        items.addAll(fetchRss(WSJ_MARKETS_RSS,         "WSJ",            3));
+        items.addAll(fetchRss(BARRONS_RSS,             "Barron's",       3));
+        items.addAll(fetchRss(NASDAQ_NEWS_RSS,         "Nasdaq",         3));
+        items.addAll(fetchRss(THESTREET_MARKETS_RSS,   "TheStreet",      3));
         items.addAll(fetchRss(
-            String.format(GOOGLE_NEWS_RSS, "stock+market+economy"), "Google News", 4));
+            String.format(GOOGLE_NEWS_RSS, "stock+market+economy+geopolitics"), "Google News", 4));
 
         // Supplement with Alpha Vantage if key configured
         if (alphaVantageKey != null && !alphaVantageKey.isBlank()) {
@@ -101,6 +119,7 @@ public class NewsService {
         }
 
         List<NewsItem> deduplicated = deduplicate(items).stream()
+                .filter(item -> isFinanciallyRelevant(item.getTitle()))
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(20)
@@ -109,6 +128,12 @@ public class NewsService {
         return deduplicated.isEmpty()
             ? ApiResponse.error("No news available")
             : ApiResponse.success(deduplicated, "rss_aggregated");
+    }
+
+    /** Returns true if the title contains at least one financial/market/geopolitics keyword. */
+    private boolean isFinanciallyRelevant(String title) {
+        if (title == null || title.isBlank()) return false;
+        return FINANCE_PATTERN.matcher(title).find();
     }
 
     /**
