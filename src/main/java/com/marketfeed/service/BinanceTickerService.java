@@ -17,12 +17,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -33,97 +31,98 @@ public class BinanceTickerService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
-            r -> { Thread t = new Thread(r, "binance-poll"); t.setDaemon(true); return t; });
+            r -> { Thread t = new Thread(r, "crypto-poll"); t.setDaemon(true); return t; });
 
     @Value("${market-feed.binance.enabled:true}")
     private boolean enabled;
 
-    @Value("${market-feed.binance.symbols:btcusdt,ethusdt,solusdt,xrpusdt,bnbusdt,dogeusdt,adausdt,avaxusdt,linkusdt,maticusdt}")
-    private String symbolsConfig;
-
-    @Value("${market-feed.binance.poll-seconds:5}")
+    @Value("${market-feed.binance.poll-seconds:10}")
     private int pollSeconds;
 
-    private static final String BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/24hr?symbols=";
+    // CoinGecko IDs → standard symbols (BTC-USD, ETH-USD, ...)
+    private static final Map<String, String> COINGECKO_IDS = Map.ofEntries(
+        Map.entry("bitcoin",         "BTC-USD"),
+        Map.entry("ethereum",        "ETH-USD"),
+        Map.entry("solana",          "SOL-USD"),
+        Map.entry("ripple",          "XRP-USD"),
+        Map.entry("binancecoin",     "BNB-USD"),
+        Map.entry("dogecoin",        "DOGE-USD"),
+        Map.entry("cardano",         "ADA-USD"),
+        Map.entry("avalanche-2",     "AVAX-USD"),
+        Map.entry("chainlink",       "LINK-USD"),
+        Map.entry("matic-network",   "MATIC-USD")
+    );
+
+    private static final String COINGECKO_URL =
+        "https://api.coingecko.com/api/v3/coins/markets" +
+        "?vs_currency=usd" +
+        "&ids=bitcoin,ethereum,solana,ripple,binancecoin,dogecoin,cardano,avalanche-2,chainlink,matic-network" +
+        "&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h";
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         if (!enabled) {
-            log.info("[Binance] REST feed disabled via config");
+            log.info("[Crypto] Feed disabled via config");
             return;
         }
-        log.info("[Binance] Starting REST poll every {}s", pollSeconds);
-        scheduler.scheduleAtFixedRate(this::poll, 0, pollSeconds, TimeUnit.SECONDS);
+        log.info("[Crypto] Starting CoinGecko poll every {}s", pollSeconds);
+        scheduler.scheduleAtFixedRate(this::poll, 5, pollSeconds, TimeUnit.SECONDS);
     }
 
     private void poll() {
         try {
-            List<String> symbols = Arrays.stream(symbolsConfig.split(","))
-                    .map(String::trim)
-                    .map(String::toUpperCase)
-                    .collect(Collectors.toList());
-
-            String symbolsJson = symbols.stream()
-                    .collect(Collectors.joining("\",\"", "[\"", "\"]"));
-
-            String url = BINANCE_TICKER_URL + java.net.URLEncoder.encode(symbolsJson, "UTF-8");
-
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
+                    .uri(URI.create(COINGECKO_URL))
                     .timeout(java.time.Duration.ofSeconds(10))
+                    .header("Accept", "application/json")
                     .GET()
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
+            if (response.statusCode() == 429) {
+                log.warn("[Crypto] CoinGecko rate-limited, backing off");
+                return;
+            }
             if (response.statusCode() != 200) {
-                log.warn("[Binance] REST poll returned {}", response.statusCode());
+                log.warn("[Crypto] CoinGecko returned {}", response.statusCode());
                 return;
             }
 
             JsonNode arr = objectMapper.readTree(response.body());
             if (!arr.isArray()) return;
 
+            int count = 0;
             for (JsonNode node : arr) {
-                String binanceSymbol = node.path("symbol").asText();
-                if (binanceSymbol.isEmpty()) continue;
+                String id     = node.path("id").asText();
+                String symbol = COINGECKO_IDS.get(id);
+                if (symbol == null) continue;
 
-                double price         = node.path("lastPrice").asDouble();
-                double open          = node.path("openPrice").asDouble();
-                double high          = node.path("highPrice").asDouble();
-                double low           = node.path("lowPrice").asDouble();
-                double volume        = node.path("volume").asDouble();
-                double changePercent = node.path("priceChangePercent").asDouble();
-                double change        = price - open;
+                double price         = node.path("current_price").asDouble();
+                double high          = node.path("high_24h").asDouble();
+                double low           = node.path("low_24h").asDouble();
+                double volume        = node.path("total_volume").asDouble();
+                double changePercent = node.path("price_change_percentage_24h").asDouble();
+                double change        = node.path("price_change_24h").asDouble();
 
                 if (price <= 0) continue;
 
-                String symbol = normalizeBinanceSymbol(binanceSymbol);
                 eventPublisher.publishEvent(new QuoteUpdatedEvent(
                         symbol, price, change, changePercent,
-                        high, low, volume, "binance", Instant.now()
+                        high, low, volume, "coingecko", Instant.now()
                 ));
+                count++;
             }
 
-            log.debug("[Binance] Polled {} symbols", arr.size());
+            log.debug("[Crypto] Polled {} symbols from CoinGecko", count);
 
         } catch (Exception e) {
-            log.warn("[Binance] Poll failed: {}", e.getMessage());
+            log.warn("[Crypto] Poll failed: {}", e.getMessage());
         }
     }
 
     @PreDestroy
     public void shutdown() {
         scheduler.shutdownNow();
-    }
-
-    private String normalizeBinanceSymbol(String binanceSymbol) {
-        if (binanceSymbol.endsWith("USDT")) {
-            return binanceSymbol.substring(0, binanceSymbol.length() - 4) + "-USD";
-        }
-        if (binanceSymbol.endsWith("USD")) {
-            return binanceSymbol.substring(0, binanceSymbol.length() - 3) + "-USD";
-        }
-        return binanceSymbol;
     }
 }
